@@ -215,6 +215,138 @@ export async function activate(context: vscode.ExtensionContext) {
     textChangeListener,
     completionProvider
   );
+  let chatPanel: vscode.WebviewPanel | undefined;
+
+context.subscriptions.push(
+  vscode.commands.registerCommand('gpt-assistant.openChat', () => {
+    if (chatPanel) {
+      chatPanel.reveal(vscode.ViewColumn.Two);
+      return;
+    }
+
+    chatPanel = vscode.window.createWebviewPanel(
+      'gptChat',
+      'GPT Chat',
+      { viewColumn: vscode.ViewColumn.Two, preserveFocus: false },
+      {
+        enableScripts: true,
+      }
+    );
+
+    chatPanel.webview.html = getWebviewContent();
+
+    // Message handler from webview
+    chatPanel.webview.onDidReceiveMessage(async message => {
+      switch (message.command) {
+        case 'sendMessage':
+          {
+            const userMsg = message.text as string;
+            // You can store and maintain conversation context here if you want
+            try {
+              const response = await askGPT([
+                { role: 'system', content: 'You are a helpful coding assistant.' },
+                { role: 'user', content: userMsg }
+              ]);
+              chatPanel?.webview.postMessage({ command: 'showResponse', text: response });
+            } catch (err) {
+              chatPanel?.webview.postMessage({ command: 'showResponse', text: `Error: ${err}` });
+            }
+          }
+          break;
+      }
+    });
+
+    chatPanel.onDidDispose(() => {
+      chatPanel = undefined;
+    });
+  })
+);
+
+// Simple HTML UI for chat panel
+function getWebviewContent() {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 10px;
+      }
+      #messages {
+        height: 300px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 5px;
+        margin-bottom: 10px;
+      }
+      .message {
+        margin-bottom: 8px;
+      }
+      .user {
+        color: blue;
+      }
+      .assistant {
+        color: green;
+      }
+      #input {
+        width: 80%;
+      }
+      #send {
+        width: 15%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="messages"></div>
+    <input id="input" type="text" placeholder="Type your message..." />
+    <button id="send">Send</button>
+
+    <script>
+      const vscode = acquireVsCodeApi();
+
+      const messagesDiv = document.getElementById('messages');
+      const input = document.getElementById('input');
+      const sendBtn = document.getElementById('send');
+
+      function appendMessage(text, sender) {
+        const div = document.createElement('div');
+        div.textContent = (sender === 'user' ? 'You: ' : 'GPT: ') + text;
+        div.className = 'message ' + sender;
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      sendBtn.addEventListener('click', () => {
+        const text = input.value.trim();
+        if (!text) return;
+        appendMessage(text, 'user');
+        vscode.postMessage({ command: 'sendMessage', text });
+        input.value = '';
+      });
+
+      window.addEventListener('message', event => {
+        const message = event.data;
+        switch (message.command) {
+          case 'showResponse':
+            appendMessage(message.text, 'assistant');
+            break;
+        }
+      });
+
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          sendBtn.click();
+          e.preventDefault();
+        }
+      });
+    </script>
+  </body>
+  </html>
+  `;
+}
+
 }
 
 export function deactivate() {}

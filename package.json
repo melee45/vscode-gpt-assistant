@@ -18,6 +18,10 @@
       {
         "command": "gpt-assistant.ask",
         "title": "Ask GPT Assistant"
+      },
+      {
+        "command": "gpt-assistant.openChat",
+        "title": "Open GPT Chat"
       }
     ]
   },
